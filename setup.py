@@ -4,7 +4,12 @@ from setuptools import find_packages
 install_requires = [
     'numpy',
     'scipy',
-    'tqdm'
+    'tqdm',
+    'matplotlib',
+    'tensorflow',
+    'imbalanced-learn',
+    'scikit-learn',
+    'librosa'
 ]
 
 setup(

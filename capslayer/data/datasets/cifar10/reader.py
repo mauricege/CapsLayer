@@ -78,7 +78,7 @@ class DataLoader(object):
             dataset = dataset.batch(batch_size)
 
             if mode == "train":
-                dataset = dataset.shuffle(buffer_size=50000)
+                dataset = dataset.shuffle(buffer_size=5000)
                 dataset = dataset.repeat()
                 iterator = dataset.make_one_shot_iterator()
             elif mode == "eval":

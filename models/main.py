@@ -202,6 +202,10 @@ def main(_):
     else:
         raise ValueError('Unsupported model, please check the name of model:', cfg.model)
 
+    dataset = "capslayer.data.datasets." + cfg.dataset
+    data_loader = import_module(dataset).DataLoader(path=cfg.data_dir,
+                                                    splitting=cfg.splitting,
+                                                    num_works=cfg.num_works)
     # Deciding which dataset to use
     if cfg.dataset == 'mnist' or cfg.dataset == 'fashion-mnist':
         height = 28
@@ -214,12 +218,15 @@ def main(_):
         width = 32
         channels = 1
 
+    elif cfg.dataset == 'spectrograms':
+        num_label = int(data_loader.num_label)
+        height = int(data_loader.height)
+        width = int(data_loader.width)
+        channels = 1
+
     # Initializing model and data loader
     net = model(height=height, width=width, channels=channels, num_label=num_label)
-    dataset = "capslayer.data.datasets." + cfg.dataset
-    data_loader = import_module(dataset).DataLoader(path=cfg.data_dir,
-                                                    splitting=cfg.splitting,
-                                                    num_works=cfg.num_works)
+
 
     # Deciding to train or evaluate model
     if cfg.is_training:

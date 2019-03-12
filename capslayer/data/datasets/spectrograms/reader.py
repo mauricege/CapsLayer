@@ -19,11 +19,11 @@ from __future__ import print_function
 
 import os
 import tensorflow as tf
-from capslayer.data.utils.download_utils import maybe_download_and_extract
-from capslayer.data.datasets.mnist.writer import tfrecord_runner
+from capslayer.data.datasets.spectrograms.writer import tfrecord_runner#
+from capslayer.data.datasets.spectrograms.gen_spectrograms import maybe_extract_spectrograms
 
 
-def parse_fun(serialized_example):
+def parse_fun(serialized_example, spec_height, spec_width):
     """ Data parsing function.
     """
     features = tf.parse_single_example(serialized_example,
@@ -37,7 +37,7 @@ def parse_fun(serialized_example):
     depth = tf.cast(features['depth'], tf.int32)
     image = tf.decode_raw(features['image'], tf.float32)
     image = tf.reshape(image, shape=[height * width * depth])
-    image.set_shape([28 * 28 * 1])
+    image.set_shape([spec_height * spec_width * 1])
     image = tf.cast(image, tf.float32) * (1. / 255)
     label = tf.cast(features['label'], tf.int32)
     features = {'images': image, 'labels': label}
@@ -51,6 +51,7 @@ class DataLoader(object):
                  num_works=1,
                  splitting="TVT",
                  one_hot=False,
+                 oversample=True,
                  name="create_inputs"):
         """
         Args:
@@ -60,16 +61,16 @@ class DataLoader(object):
 
         # path exists and is writable?
         if path is None:
-            path = os.path.join(os.environ["HOME"], ".cache", "capslayer", "datasets", "mnist")
+            path = os.path.join(os.environ["HOME"], ".cache", "capslayer", "datasets", "spectrograms")
             os.makedirs(path, exist_ok=True)
         elif os.access(path, os.F_OK):
-            path = path if os.path.basename(path) == "mnist" else os.path.join(path, "mnist")
+            path = path if os.path.basename(path) == "spectrograms" else os.path.join(path, "spectrograms")
             os.makedirs(path, exist_ok=True)
         elif os.access(path, os.W_OK):
             raise IOError("Permission denied! Path %s is not writable." % (str(path)))
 
-        # data downloaded and data extracted?
-        maybe_download_and_extract("mnist", path)
+        # data present and data extracted?
+        self.height, self.width, self.num_label = maybe_extract_spectrograms(path, oversample=oversample)
         # data tfrecorded?
         tfrecord_runner(path, force=False)
         self.handle = tf.placeholder(tf.string, shape=[])
@@ -88,9 +89,9 @@ class DataLoader(object):
             modes = ["train", "test", "eval"]
             if mode not in modes:
                 raise "mode not found! supported modes are " + modes
-            filenames = [os.path.join(self.path, "%s_mnist.tfrecord" % mode)]
+            filenames = [os.path.join(self.path, "%s.tfrecord" % mode)]
             dataset = tf.data.TFRecordDataset(filenames)
-            dataset = dataset.map(parse_fun)
+            dataset = dataset.map(lambda se: parse_fun(se, self.height, self.width))
             dataset = dataset.batch(batch_size)
 
             if mode == "train":
