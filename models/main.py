@@ -24,6 +24,7 @@ import tensorflow as tf
 from tensorflow.python.client import timeline
 from importlib import import_module
 from capslayer.plotlib import plot_activation
+from sklearn.metrics import recall_score
 
 from config import cfg
 
@@ -36,6 +37,7 @@ def save_to(is_training):
         loss = os.path.join(cfg.results_dir, 'loss.csv')
         train_acc = os.path.join(cfg.results_dir, 'train_acc.csv')
         val_acc = os.path.join(cfg.results_dir, 'val_acc.csv')
+        val_uar = os.path.join(cfg.results_dir, 'val_uar.csv')
 
         if os.path.exists(val_acc):
             os.remove(val_acc)
@@ -50,16 +52,25 @@ def save_to(is_training):
         fd_loss.write('step,loss\n')
         fd_val_acc = open(val_acc, 'w')
         fd_val_acc.write('step,val_acc\n')
+        fd_val_uar = open(val_uar, 'w')
+        fd_val_uar.write('step,val_uar\n')
         fd = {"train_acc": fd_train_acc,
               "loss": fd_loss,
-              "val_acc": fd_val_acc}
+              "val_acc": fd_val_acc,
+              "val_uar": fd_val_uar}
     else:
-        test_acc = os.path.jion(cfg.results_dir, 'test_acc.csv')
+        test_acc = os.path.join(cfg.results_dir, 'test_acc.csv')
+        test_uar = os.path.join(cfg.results_dir, 'test_uar.csv')
+
         if os.path.exists(test_acc):
             os.remove(test_acc)
         fd_test_acc = open(test_acc, 'w')
         fd_test_acc.write('test_acc\n')
-        fd = {"test_acc": fd_test_acc}
+        if os.path.exists(test_uar):
+            os.remove(test_uar)
+        fd_test_uar = open(test_uar, 'w')
+        fd_test_uar.write('test_uar\n')
+        fd = {"test_uar": fd_test_uar}
 
     return(fd)
 
@@ -115,7 +126,7 @@ def train(model, data_loader):
                 # assert not np.isnan(loss_val), 'Something wrong! loss is nan...'
 
             if step % cfg.val_sum_every == 0:
-                print("evaluating, it will take a while...")
+                print(f"Step {step}: evaluating...")
                 sess.run(validation_iterator.initializer)
                 probs = []
                 targets = []
@@ -131,12 +142,16 @@ def train(model, data_loader):
                     except tf.errors.OutOfRangeError:
                         break
                 probs = np.concatenate(probs, axis=0)
+                predictions = np.argmax(probs, axis=1)
                 targets = np.concatenate(targets, axis=0).reshape((-1, 1))
                 avg_acc = total_acc / n
                 path = os.path.join(os.path.join(cfg.results_dir, "activations"))
                 plot_activation(np.hstack((probs, targets)), step=step, save_to=path)
+                uar = recall_score(targets, predictions, labels=range(probs.shape[1]), average='macro')
                 fd["val_acc"].write("{:d},{:.4f}\n".format(step, avg_acc))
                 fd["val_acc"].flush()
+                fd["val_uar"].write("{:d},{:.4f}\n".format(step, uar))
+                fd["val_uar"].flush()
             if step % cfg.save_ckpt_every == 0:
                 saver.save(sess,
                            save_path=os.path.join(cfg.logdir, 'model.ckpt'),
@@ -145,7 +160,7 @@ def train(model, data_loader):
             duration = time.time() - start_time
             log_str = ' step: {:d}, loss: {:.3f}, time: {:.3f} sec/step' \
                       .format(step, loss_val, duration)
-            print(log_str)
+            #print(log_str)
 
 
 def evaluate(model, data_loader):
@@ -180,13 +195,17 @@ def evaluate(model, data_loader):
             except tf.errors.OutOfRangeError:
                 break
         probs = np.concatenate(probs, axis=0)
+        predictions = np.argmax(probs, axis=1)
         targets = np.concatenate(targets, axis=0).reshape((-1, 1))
         avg_acc = total_acc / n
         out_path = os.path.join(cfg.results_dir, 'prob_test.txt')
+        uar = recall_score(targets, predictions, labels=range(probs.shape[1]), average='macro')
         np.savetxt(out_path, np.hstack((probs, targets)), fmt='%1.2f')
         print('Classification probability for each category has been saved to ' + out_path)
         fd["test_acc"].write(str(avg_acc))
         fd["test_acc"].close()
+        fd["test_uar"].write("{:.4f}\n".format(uar))
+        fd["test_uar"].close()
         out_path = os.path.join(cfg.results_dir, 'test_accuracy.txt')
         print('Test accuracy has been saved to ' + out_path)
 
